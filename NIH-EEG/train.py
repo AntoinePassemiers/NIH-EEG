@@ -5,22 +5,10 @@ from scipy.io import loadmat
 import os, sys
 import numpy as np
 
-sys.path.insert(0, 'C:\Users\Xanto183\git\Ephelia-Vocals\Ephelia\Ephelia')
+sys.path.insert(0, 'C:\Users\Xanto183\git\ArchMM\ArchMM\ArchMM\CyFiles')
 
-from MachineLearning.HMM_Core import AdaptiveHMM
-
-def HaarDWT(signal):
-    N = len(signal)
-    output = np.zeros(N)
-    length = N >> 1
-    while True:
-        for i in xrange(0, length):
-            output[i] = signal[i * 2] + signal[i * 2 + 1]
-            output[length + i] = signal[i * 2] - signal[i * 2 + 1]
-        if length == 1:
-            return output
-        signal = output[:length << 1]
-        length >>= 1
+from HMM_Core import AdaptiveHMM
+from Spectral import *
         
 def downSample(signal, f1, f2):
     step = np.round(float(f1) / f2)
@@ -41,13 +29,17 @@ def getDataset(I, J, K):
 DS_0 = getDataset(1, 1, 0)
 DS_1 = getDataset(1, 1, 1)
 
-hmm = AdaptiveHMM(10)
-hmm.fit(np.asarray(DS_0["data"][6000:9000], dtype = np.float), dynamic_features = False)
-print(hmm.score(np.asarray(DS_0["data"][3000:6000], dtype = np.float)))
-print(hmm.score(np.asarray(DS_1["data"][3000:6000], dtype = np.float)))
-hmm = AdaptiveHMM(10)
-hmm.fit(np.asarray(DS_1["data"][6000:9000], dtype = np.float), dynamic_features = False)
-print(hmm.score(np.asarray(DS_0["data"][3000:6000], dtype = np.float)))
-print(hmm.score(np.asarray(DS_1["data"][3000:6000], dtype = np.float)))
 
+alpha = AlphaCoherence(DS_0["data"][15000:16000, :], DS_0["sampling_rate"])
+print(alpha)
+"""
+hmm = AdaptiveHMM(10)
+hmm.fit(np.asarray(DS_0["data"][3000:6000], dtype = np.float), dynamic_features = False)
+print(hmm.score(np.asarray(DS_0["data"][3000:6000], dtype = np.float)))
+print(hmm.score(np.asarray(DS_1["data"][3000:6000], dtype = np.float)))
+hmm = AdaptiveHMM(10)
+hmm.fit(np.asarray(DS_1["data"][3000:6000], dtype = np.float), dynamic_features = False)
+print(hmm.score(np.asarray(DS_0["data"][3000:6000], dtype = np.float)))
+print(hmm.score(np.asarray(DS_1["data"][3000:6000], dtype = np.float)))
+"""
 print("Finished")
