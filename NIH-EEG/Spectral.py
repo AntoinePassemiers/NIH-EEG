@@ -5,19 +5,8 @@ import numpy as np
 from scipy.signal import csd
 
 
-
-def HaarDWT(signal):
-    N = len(signal)
-    output = np.zeros(N)
-    length = N >> 1
-    while True:
-        for i in xrange(0, length):
-            output[i] = signal[i * 2] + signal[i * 2 + 1]
-            output[length + i] = signal[i * 2] - signal[i * 2 + 1]
-        if length == 1:
-            return output
-        signal = output[:length << 1]
-        length >>= 1
+def STE(signal):
+    return np.sum(signal ** 2, axis = 0)
 
 def AutospectralDensities(signals, fs):
     n_signals = signals.shape[1]
@@ -26,15 +15,14 @@ def AutospectralDensities(signals, fs):
         autospectralDensities.append(csd(signals[:, i], signals[:, i], fs = fs)[1])
     return autospectralDensities
 
-def AlphaCoherence(signals,autospectralDensities, fs):
-    n_signals = signals.shape[1]
-    alpha = np.eye(n_signals, dtype = float)
-    for i in range(n_signals):
-        for j in range(n_signals):
-            if i != j:
-                G_xy = np.abs(csd(signals[:, i], signals[:, j], fs = fs)[1])
-                G_xx = autospectralDensities[i]
-                G_yy = autospectralDensities[j]
-                alpha[i, j] = np.dot(G_xy, G_xy) / np.dot(G_xx, G_yy)
-                print(i, j)
-    return alpha
+def AlphaCoherence(signals, autospectralDensities, i, j, fs):
+    G_xy = np.abs(csd(signals[:, i], signals[:, j], fs = fs)[1])
+    G_xx = autospectralDensities[i]
+    G_yy = autospectralDensities[j]
+    A = np.dot(G_xy, G_xy)
+    B = np.vdot(G_xx, G_yy).real
+    if A == 0:
+        return 0
+    elif B == 0:
+        return 0
+    return np.dot(G_xy, G_xy) / np.vdot(G_xx, G_yy).real
