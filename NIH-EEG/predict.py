@@ -43,14 +43,13 @@ def train(n_files):
                       "1_302_0.mat", "1_91_1.mat", "1_812_0.mat", "1_140_1.mat"]
     filenames = training_files + filenames
 
-    featureset = FeatureSet()
-    featureset.add(FeatureSTE(16))
-    featureset.add(FeatureZeroCrossings(16))
-    featureset.add(FeatureSpectralCoherence(16, fs = 400))
+    featureset = FeatureSet(16, fs = 400)
+    featureset.add(FeatureSTE())
+    featureset.add(FeatureZeroCrossings())
+    featureset.add(FeatureSpectralCoherence().config(architecture = "circular"))
 
     n_features = len(featureset)
     inputs, outputs = list(), list()
-    predictions, targets = [], []
     all_means = np.empty((n_files, n_features))
     all_stds  = np.empty((n_files, n_features))
     all_dropout_rates = list()
@@ -98,17 +97,15 @@ def train(n_files):
     
     
     train_inputs, train_outputs = list(), list()
-    for i in [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]:
+    ids = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    for i in ids:
         train_inputs.append(inputs[i])
         train_outputs.append(outputs[i])
     fit = iohmm.fit(train_inputs, targets = train_outputs, n_classes = 2,
                   n_iterations = 60, is_classifier = True, parameters = config)
-    print(fit[0])
-    print(fit[1])
-    print(fit[2])
-    print(fit[3])
     for i in range(4):
         np.save(open("iohmm_training_%i" % i, "wb"), fit[i])
+    pickle.dump(filenames[:len(ids)], open("sequence_names", "wb"))
     TP, FP, TN, FN = 0, 0, 0, 0
     for i in range(len(inputs)):
         prediction = iohmm.predictIO(inputs[i])

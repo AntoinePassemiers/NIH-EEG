@@ -122,9 +122,9 @@ def process(dataset, featureset):
 
 def MCC(TP, FP, TN, FN):
     """ Matthew's Correlation Coefficient """
-    mcc = np.sqrt((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))
+    mcc = np.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
     if mcc != 0:
-        mcc = (TP*TN + FP*FN) / mcc
+        mcc = (TP * TN + FP * FN) / mcc
     positive_rate = 0 if TP + FN == 0 else float(TP) / (TP + FP)
     negative_rate = 0 if FP + TN == 0 else float(TN) / (TN + FN)  
     return mcc, positive_rate, negative_rate
