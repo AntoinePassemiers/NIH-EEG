@@ -2,27 +2,36 @@
 
 from utils import *
 import numpy as np
-from scipy.signal import csd
+from scipy.signal import coherence
 
+
+COHERENCE_BINS = np.array([0.1, 4.0, 8.0, 12.0, 30.0, 70.0, 180.0])
+COHERENCE_NAMES = ["delta", "theta", "alpha", "beta", "gamma", "high gamma"]
+
+@np.vectorize
+def elog(value):
+    return np.log(value) if value > 0 else -9999
+
+def ZCR(signal):
+    return len(np.where(np.diff(np.signbit(signal)))[0])
 
 def STE(signal):
     return np.sum(signal ** 2, axis = 0)
 
-def AutospectralDensities(signals, fs):
-    n_signals = signals.shape[1]
-    autospectralDensities = []
-    for i in range(n_signals):
-        autospectralDensities.append(csd(signals[:, i], signals[:, i], fs = fs)[1])
-    return autospectralDensities
+def PowerSpectrum(signal):
+    fft = np.fft.fft(signal)
+    return fft ** 2 / len(fft)
 
-def AlphaCoherence(signals, autospectralDensities, i, j, fs):
-    G_xy = np.abs(csd(signals[:, i], signals[:, j], fs = fs)[1])
-    G_xx = autospectralDensities[i]
-    G_yy = autospectralDensities[j]
-    A = np.dot(G_xy, G_xy)
-    B = np.vdot(G_xx, G_yy).real
-    if A == 0:
-        return 0
-    elif B == 0:
-        return 0
-    return np.dot(G_xy, G_xy) / np.vdot(G_xx, G_yy).real
+def ProbSpectralDensity(signal):
+    spectrum = PowerSpectrum(signal).real
+    return spectrum / np.sum(spectrum)
+
+def PowerSpectralEntropy(signal):
+    density = ProbSpectralDensity(signal)
+    return - np.sum(density * elog(density))
+
+def allCoherenceBins(N, fs):
+    return coherence(np.random.rand(N), np.random.rand(N), fs = fs)[0]
+
+def SpectralCoherence(signals, i, j, fs):
+    return coherence(signals[:, i], signals[:, j], fs = fs)[1].mean()

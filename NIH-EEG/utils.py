@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 from Spectral import *
 
-warnings.filterwarnings('ignore')
+# warnings.filterwarnings('ignore')
 
 from scipy.io import loadmat
 
@@ -21,12 +21,13 @@ class TooMuchDropOut(ValueError):
         self.message = message
         super(TooMuchDropOut, self).__init__(message, *args)
         
-def checkDropOuts(data):
+def checkDropOuts(data, raise_error = True):
     total = data.shape[0] * data.shape[1]
-    nonzeros = np.count_nonzero(total)
+    nonzeros = np.count_nonzero(data)
     dropouts = total - nonzeros
-    if dropouts > 5000:
+    if dropouts > 0 and raise_error:
         raise TooMuchDropOut("Error. Too much drop out in mat file.")
+    return float(dropouts) / float(total) > 0.008
 
 def matToDataset(mat):
     data_struct = mat["dataStruct"][0][0]
@@ -35,7 +36,8 @@ def matToDataset(mat):
     data["sampling_rate"] = data_struct[1][0][0]
     data["n_samples"] = data_struct[2][0][0]
     data["channel_indices"] = data_struct[3][0]
-    data["sequence_number"] = data_struct[4][0][0]
+    if len(data_struct) > 4:
+        data["sequence_number"] = data_struct[4][0][0]
     return data
         
 def getDataset(I, hour, K):
@@ -79,28 +81,51 @@ def downSample(signal, f1, f2):
     return signal[::step] if len(signal.shape) == 1 else signal[::step, :]
 
 
-def extractFeatures(dataset, begin, end):
+def extractFeatures(dataset, featureset, begin, end):
     assert(begin < end)
-    electrode_ids = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1]
-    data = np.copy(dataset["data"][begin:end])
-    window = np.hanning(end - begin)
-    for i in range(16):
-        data[:, i] = window * data[:, i]
-    autosp = AutospectralDensities(data, dataset["sampling_rate"])
-    features = np.empty(32, dtype = float)
-    for i in range(16):
-        features[i] = AlphaCoherence(data, autosp, electrode_ids[i], 
-                                  electrode_ids[i + 1], dataset["sampling_rate"])
-    features[16:32] = STE(data)
-    return features
+    n_features = len(featureset)
+    data = np.copy(dataset["data"][begin:end]) # TODO
+    has_dropouts = checkDropOuts(data, raise_error = False)
+    # window = np.hanning(end - begin)
+    # for i in range(16):
+    #    data[:, i] = window * data[:, i]
+    if not has_dropouts:
+        assert(len(featureset) > 0)
+        features = np.empty(len(featureset), dtype = np.float64)
+        k, l = 0, 0
+        for f in featureset.getFeatures():
+            l += len(f)
+            features[k:l] = f.process(data)
+            k += len(f)
+        return features, False
+    else:
+        features = np.empty(n_features)
+        features[:] = np.nan
+        return features, True
 
-def a(dataset):
-    checkDropOuts(dataset["data"])
-    obs = np.empty((100, 32), dtype = np.float)
-    step = len(dataset["data"]) / 100
-    for i in range(100):
-        obs[i] = extractFeatures(dataset, i * step, i * step + 1024)
-    return obs
+def process(dataset, featureset):
+    n_samples = 400
+    n_features = len(featureset)
+    obs = np.zeros((n_samples, n_features), dtype = np.float)
+    step = len(dataset["data"]) / n_samples
+    dropout_rate = 0
+    for i in range(n_samples):
+        features, has_nan = extractFeatures(dataset, featureset, i * step, i * step + 512)
+        dropout_rate = dropout_rate if not has_nan else dropout_rate + 1
+        if len(features) > 0:
+            obs[i] = features
+        else:
+            if 0 < i:
+                obs[i] = obs[i - 1]
+    dropout_rate /= float(n_samples)
+    return obs, dropout_rate
 
-
+def MCC(TP, FP, TN, FN):
+    """ Matthew's Correlation Coefficient """
+    mcc = np.sqrt((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))
+    if mcc != 0:
+        mcc = (TP*TN + FP*FN) / mcc
+    positive_rate = 0 if TP + FN == 0 else float(TP) / (TP + FP)
+    negative_rate = 0 if FP + TN == 0 else float(TN) / (TN + FN)  
+    return mcc, positive_rate, negative_rate
 
