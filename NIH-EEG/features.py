@@ -3,9 +3,35 @@ from Spectral import *
 
 
 class SharedData:
-    pass        
+    def __init__(self):
+        self.memory = None
+        
 class SharedCoherence(SharedData):
-    pass
+    memory = list()
+    fs = 400
+    n_electrodes = 0
+    architecture = "circular"
+    electrode_ids = list()
+    @staticmethod
+    def process(signals):
+        SharedCoherence.memory = list()
+        if SharedCoherence.architecture == "circular":
+            for i in range(SharedCoherence.n_electrodes):
+                SharedCoherence.memory.append(SpectralCoherence(signals, SharedCoherence.electrode_ids[i], 
+                    SharedCoherence.electrode_ids[i + 1], SharedCoherence.fs))
+        elif SharedCoherence.architecture == "full":
+            for i in range(SharedCoherence.n_electrodes):
+                for j in range(SharedCoherence.n_electrodes):
+                    if i != j:
+                        SharedCoherence.memory.append(SpectralCoherence(signals, 
+                            SharedCoherence.electrode_ids[i], 
+                            SharedCoherence.electrode_ids[j], SharedCoherence.fs))
+        else:
+            NotImplementedError()
+        return SharedCoherence.memory
+    @staticmethod
+    def getMemory():
+        return SharedCoherence.memory
 
 class Feature:
     def __init__(self):
@@ -47,30 +73,33 @@ class FeatureSpectralCoherence(Feature):
     def __init__(self, *args, **kwargs):
         Feature.__init__(self, *args, **kwargs)
         self.architecture = "circular"
+        self.band = all_bands["all"]
         self.electrode_ids = list(range(self.__len__())) + [0]
         self.shared = SharedCoherence
+        self.shared.architecture = self.architecture
+        self.shared.electrode_ids = self.electrode_ids
         FeatureSpectralCoherence.coherences.append(self)
     def __len__(self):
         if self.architecture == "circular":
             return self.n_electrodes
         else:
             return self.n_electrodes * (self.n_electrodes - 1)
-    def config(self, architecture = "circular"):
+    def config(self, architecture = "circular", band = "all"):
         self.architecture = architecture
+        self.band = all_bands[band]
         return self
     def process(self, signals):
         features = np.empty(self.__len__(), dtype = float)
+        memory = self.shared.getMemory()
         if self.architecture == "circular":
             for i in range(self.__len__()):
-                features[i] = SpectralCoherence(signals, self.electrode_ids[i], 
-                    self.electrode_ids[i + 1], self.fs)
+                features[i] = memory[i][self.band].mean()
         elif self.architecture == "full":
             k = 0
             for i in range(self.n_electrodes):
                 for j in range(self.n_electrodes):
                     if i != j:
-                        features[k] = SpectralCoherence(signals, self.electrode_ids[i], 
-                            self.electrode_ids[j], self.fs)
+                        features[k] = memory[k][self.band].mean()
                         k += 1
         else:
             NotImplementedError()
@@ -79,6 +108,7 @@ class FeatureSpectralCoherence(Feature):
 class FeatureSet:
     def __init__(self, n_electrodes, fs = 400):
         self.features = list()
+        self.shared = list()
         self.n = 0
         self.n_electrodes = n_electrodes
         self.fs = fs
@@ -87,6 +117,10 @@ class FeatureSet:
         feature.n_electrodes = self.n_electrodes
         self.features.append(feature)
         self.n += len(feature)
+        if feature.shared and feature.shared not in self.shared:
+            feature.shared.n_electrodes = len(feature)
+            feature.shared.fs = self.fs
+            self.shared.append(feature.shared)
     def getFeatures(self):
         return self.features
     def __len__(self):

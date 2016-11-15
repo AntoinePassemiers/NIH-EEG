@@ -92,6 +92,8 @@ def extractFeatures(dataset, featureset, begin, end):
     if not has_dropouts:
         assert(len(featureset) > 0)
         features = np.empty(len(featureset), dtype = np.float64)
+        for f in featureset.shared:
+            f.process(data)
         k, l = 0, 0
         for f in featureset.getFeatures():
             l += len(f)

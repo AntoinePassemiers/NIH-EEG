@@ -11,6 +11,12 @@ ALPHA_BINS_400_HZ = slice(6, 8)
 BETA_BINS_400_HZ  = slice(8, 20)
 GAMMA_BINS_400_HZ = slice(20, 45)
 HIGH_GAMMA_BINS_400_HZ = slice(45, 116)
+ALL_BINS_400_HZ = slice(0, 120)
+
+all_bands = {"delta" : DELTA_BINS_400_HZ, "theta" : THETA_BINS_400_HZ, 
+             "alpha" : ALPHA_BINS_400_HZ, "beta" : BETA_BINS_400_HZ, 
+             "gamma" : GAMMA_BINS_400_HZ, "high gamma" : HIGH_GAMMA_BINS_400_HZ,
+             "all" : ALL_BINS_400_HZ}
 
 @np.vectorize
 def elog(value):
@@ -38,4 +44,4 @@ def allCoherenceBins(N, fs):
     return coherence(np.random.rand(N), np.random.rand(N), fs = fs)[0]
 
 def SpectralCoherence(signals, i, j, fs):
-    return coherence(signals[:, i], signals[:, j], fs = fs)[1].mean()
+    return coherence(signals[:, i], signals[:, j], fs = fs)[1]
