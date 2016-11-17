@@ -77,9 +77,10 @@ def main():
             for id in rd_ids:
                 rd_filepaths.append(filepaths[id])
                 rd_labels.append(labels[id])
-            
+            labels = rd_labels
+            filepaths = rd_filepaths
             if not os.path.isfile(os.path.join(model_path, "classifier_%i" % model_id)):
-                inputs, outputs, all_dropout_rates = preprocessDataset(rd_filepaths, rd_labels, featureset)
+                inputs, outputs, all_dropout_rates = preprocessDataset(filepaths, labels, featureset)
                 np.save(open("features", "wb"), inputs)
                 target_sequences = list()
                 for j in range(len(labels)):

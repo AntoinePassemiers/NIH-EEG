@@ -83,11 +83,15 @@ def downSample(signal, f1, f2):
 def extractFeatures(dataset, featureset, begin, end):
     assert(begin < end)
     n_features = len(featureset)
-    data = np.copy(dataset["data"][begin:end]) # TODO
+    data = dataset["data"][begin:end]
     has_dropouts = checkDropOuts(data, raise_error = False)
     # window = np.hanning(end - begin)
     # for i in range(16):
     #    data[:, i] = window * data[:, i]
+    grubbs = GrubbsTest(end - begin, alpha = 0.005)
+    for i in range(featureset.n_electrodes):
+        while grubbs.test(data[:, i]):
+            pass
     if not has_dropouts:
         assert(len(featureset) > 0)
         features = np.empty(len(featureset), dtype = np.float64)
