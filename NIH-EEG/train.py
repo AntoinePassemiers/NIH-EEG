@@ -1,40 +1,103 @@
 # -*- coding: utf-8 -*-
 
 import sys
-sys.path.insert(0, 'C:\Users\Xanto183\git\ArchMM\ArchMM\ArchMM\CyFiles')
+import theano
+sys.path.insert(0, 'C://Users/Xanto183/git/ArchMM/ArchMM/')
+sys.path.insert(0, 'C://Users/Xanto183/git/ArchMM/ArchMM/Cyfiles/')
 from utils import *
 import os, time
 import numpy as np
-from HMM_Core import AdaptiveHMM
 
-""" TODO
-- Manage electrode drop-outs
-- Remove artifacts from the input signals
-- Downsample to 200%
-- Divide the bandwidth in 6 parts : theta, alpha, low gamma, ...
-- Use the wavelet coherence in place of the spectral coherence
-"""
+from HMM_Core import AdaptiveHMM, IOConfig
+from features import *
 
-PREICTAL_LABEL = 1
-INTERICTAL_LABEL = 0
+NUM_EXAMPLES_BY_MODEL = 4
+MIN_FILE_SIZE = 1500000
 
 def main(): 
     directory = os.path.join(MODEL_PATH, "HMMs")
     if not os.path.exists(directory):
         os.makedirs(directory)
+    p_filenames, n_filenames = list(), list()
+    for k in range(3):
+        p_temp, n_temp = list(), list()
+        directory = os.path.join(DATA_PATH, "Train/train_%i" % (k + 1))
+        for filename in os.listdir(directory):
+            if filename.split('_')[2][0] == '1':
+                filepath = os.path.join(directory, filename)
+                filesize = os.path.getsize(filepath)
+                if filesize > MIN_FILE_SIZE:
+                    p_temp.append(filepath)
+        n_pairs = 0
+        for filename in os.listdir(directory):
+            if filename.split('_')[2][0] == '0':
+                filepath = os.path.join(directory, filename)
+                filesize = os.path.getsize(filepath)
+                if filesize > MIN_FILE_SIZE:
+                    n_temp.append(filepath)
+                    n_pairs += 1
+                    if n_pairs == len(p_filenames):
+                        break
+        p_filenames.append(p_temp)
+        n_filenames.append(n_temp)
     
-    for i in range(0, 50):
-        DS_0 = getDataset(1, i, 0)
-        DS_1 = getDataset(1, i, 1)
-        DS = [DS_0, DS_1]
-        for j in range(6):
-            for k in range(2):
-                dt = a(DS[k][j])
-                for n_clusters in [3, 5, 12]:
-                    hmm = AdaptiveHMM(n_clusters, "ergodic", standardize = False)
-                    hmm.fit(dt, dynamic_features = False)
-                    hmm.pySave(os.path.join(directory, "hmm_%i_%i_%i_%i" % (i, j, k, n_clusters)))
-    
+    p_filenames[0] = [os.path.join(DATA_PATH, "Train/train_1/1_77_1.mat"),
+                   os.path.join(DATA_PATH, "Train/train_1/1_16_1.mat")] + p_filenames[0]
+    n_filenames[0] = [os.path.join(DATA_PATH, "Train/train_1/1_89_0.mat"),
+                   os.path.join(DATA_PATH, "Train/train_1/1_23_0.mat")] + n_filenames[0]
+            
+    n_states = 5        
+    config = IOConfig()
+    config.n_iterations = 50
+    config.pi_learning_rate = 0.005
+    config.pi_nhidden = 30
+    config.pi_nepochs = 2
+    config.s_learning_rate  = 0.005
+    config.s_nhidden  = 30
+    config.s_nepochs = 2
+    config.o_learning_rate  = 0.005
+    config.o_nhidden  = 30
+    config.o_nepochs = 2
+    config.missing_value_sym = np.nan
+    featureset = FeatureSet(16, fs = 400)
+    featureset.add(FeatureSTE())
+    featureset.add(FeatureZeroCrossings())
+    featureset.add(FeatureSpectralCoherence().config(architecture = "circular", band = "all"))
+    # featureset.add(FeatureHurstExponent())
+    model_path = os.path.join(DATA_PATH, "model")
+    model_id = 0
+    for k in range(3):
+        for j in range(2 * len(p_filenames[k]) / NUM_EXAMPLES_BY_MODEL):
+            filepaths  = p_filenames[k][j*NUM_EXAMPLES_BY_MODEL:(j+1)*NUM_EXAMPLES_BY_MODEL]
+            filepaths += n_filenames[k][j*NUM_EXAMPLES_BY_MODEL:(j+1)*NUM_EXAMPLES_BY_MODEL]
+            labels = [1] * (NUM_EXAMPLES_BY_MODEL / 2) + [0] * (NUM_EXAMPLES_BY_MODEL / 2)
+            rd_ids = list(range(NUM_EXAMPLES_BY_MODEL))
+            random.shuffle(rd_ids)
+            rd_filepaths, rd_labels = list(), list()
+            for id in rd_ids:
+                rd_filepaths.append(filepaths[id])
+                rd_labels.append(labels[id])
+            
+            if not os.path.isfile(os.path.join(model_path, "classifier_%i" % model_id)):
+                inputs, outputs, all_dropout_rates = preprocessDataset(rd_filepaths, rd_labels, featureset)
+                np.save(open("features", "wb"), inputs)
+                target_sequences = list()
+                for j in range(len(labels)):
+                    if labels[j] == 0:
+                        target_sequences.append(np.zeros(len(inputs[j])))
+                    else:
+                        target_sequences.append(np.ones(len(inputs[j])))
+                iohmm = AdaptiveHMM(n_states, has_io = True)
+                fit = iohmm.fit(inputs, targets = target_sequences, n_classes = 2,
+                            is_classifier = True, parameters = config)
+                for i in range(4):
+                    np.save(open("iohmm_training_%i" % i, "wb"), fit[i])
+                iohmm.pySave(os.path.join(model_path, "classifier_%i" % model_id))
+                # iohmm = AdaptiveHMM(n_states, has_io = True)
+                # iohmm.pyLoad(os.path.join(model_path, "classifier_%i" % model_id))
+                for i in range(len(inputs)):
+                    print(iohmm.predictIO(inputs[i]), labels[i])
+            model_id += 1
         
 if __name__ == "__main__":
     main()

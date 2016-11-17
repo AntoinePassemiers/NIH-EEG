@@ -1,6 +1,6 @@
 import numpy as np
 from Spectral import *
-
+import nolds
 
 class SharedData:
     def __init__(self):
@@ -40,6 +40,24 @@ class Feature:
         self.shared = None
     def __len__(self):
         return self.n_electrodes
+    
+class FeatureLyapunovExponent(Feature):
+    def __init__(self, *args, **kwargs):
+        Feature.__init__(self, *args, **kwargs)
+    def process(self, signals):
+        features = np.empty(self.__len__(), dtype = np.float64)
+        for i in range(self.__len__()):
+            features[i] = nolds.lyap_r(signals[:, i])
+        return features
+    
+class FeatureHurstExponent(Feature):
+    def __init__(self, *args, **kwargs):
+        Feature.__init__(self, *args, **kwargs)
+    def process(self, signals):
+        features = np.empty(self.__len__(), dtype = np.float64)
+        for i in range(self.__len__()):
+            features[i] = nolds.hurst_rs(signals[:, i])
+        return features
 
 class FeatureSTE(Feature):
     def __init__(self, *args, **kwargs):
@@ -90,11 +108,17 @@ class FeatureSpectralCoherence(Feature):
         return self
     def process(self, signals):
         features = np.empty(self.__len__(), dtype = float)
-        memory = self.shared.getMemory()
         if self.architecture == "circular":
+            autosp = AutospectralDensities(signals, self.fs)
+            for i in range(self.__len__()):
+                features[i] = AlphaCoherence(signals, autosp, self.electrode_ids[i], 
+                    self.electrode_ids[i + 1], self.fs)
+            """
             for i in range(self.__len__()):
                 features[i] = memory[i][self.band].mean()
+            """
         elif self.architecture == "full":
+            memory = self.shared.getMemory()
             k = 0
             for i in range(self.n_electrodes):
                 for j in range(self.n_electrodes):

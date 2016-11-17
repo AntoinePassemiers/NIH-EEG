@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 
-import json, os, pickle, random
+import json, os, pickle, random, csv
 import warnings
 import numpy as np
-from Spectral import *
-
-# warnings.filterwarnings('ignore')
-
 from scipy.io import loadmat
+
+from Spectral import *
+from outliers import *
 
 with open('SETTINGS.json') as settings_file:
     SETTINGS = json.load(settings_file)
@@ -131,3 +130,62 @@ def MCC(TP, FP, TN, FN):
     negative_rate = 0 if FP + TN == 0 else float(TN) / (TN + FN)  
     return mcc, positive_rate, negative_rate
 
+def removeCorruptedFiles():
+    safe_labels_file = open(os.path.join(DATA_PATH, "train_and_test_data_labels_safe.csv"), "r")
+    spamreader = csv.reader(safe_labels_file)
+    spamreader.next()
+    for line in spamreader:
+        filename = line[0]
+        is_safe = int(line[2])
+        if not is_safe:
+            patient_id = int(filename.split('_')[0])
+            filepath = os.path.join(DATA_PATH, "Train/train_%i/%s" % (patient_id, filename))
+            if os.path.isfile(filepath):
+                os.remove(filepath)
+            
+    safe_labels_file.close()
+    
+def preprocessDataset(filepaths, labels, featureset):
+    n_files = len(filepaths)
+    n_features = len(featureset)
+    inputs, outputs = list(), list()
+    all_means = np.empty((n_files, n_features))
+    all_stds  = np.empty((n_files, n_features))
+    all_dropout_rates = list()
+    for i in range(n_files):
+        filepath = filepaths[i]
+        print("Processing file number %i" % i)
+        mat = loadmat(filepath)
+        data, dropout_rate = process(matToDataset(mat), featureset)
+        data = np.asarray(data, dtype = np.float32)
+        all_dropout_rates.append(dropout_rate)
+        masked = np.ma.masked_array(data, np.isnan(data))
+        all_means[i, :] = np.mean(masked, axis = 0)
+        all_stds[i, :] = np.std(masked, axis = 0)
+        label = labels[i]
+        if label == 1:
+            output = np.ones(len(data), dtype = np.int32)
+        elif label == 0:
+            output = np.zeros(len(data), dtype = np.int32)
+        else:
+            raise ValueError("Label is not 0 or 1")
+        print("Label : %i" % label)
+        inputs.append(data)
+        outputs.append(output)
+    """
+    global_mean = all_means.mean(axis = 0)
+    global_std  = all_stds.mean(axis = 0)
+    for i in range(n_files):
+        for j in range(len(global_std)):
+            inputs[i][:, j] -= global_mean[j]
+            inputs[i][:, j] /= global_std[j]
+    """
+    return inputs, outputs, all_dropout_rates
+    
+    
+    
+    
+    
+    
+    
+    
