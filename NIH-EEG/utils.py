@@ -88,7 +88,7 @@ def extractFeatures(dataset, featureset, begin, end):
     # window = np.hanning(end - begin)
     # for i in range(16):
     #    data[:, i] = window * data[:, i]
-    grubbs = GrubbsTest(end - begin, alpha = 0.005)
+    grubbs = GrubbsTest(end - begin, alpha = 0.01)
     for i in range(featureset.n_electrodes):
         while grubbs.test(data[:, i]):
             pass
@@ -176,14 +176,14 @@ def preprocessDataset(filepaths, labels, featureset):
         print("Label : %i" % label)
         inputs.append(data)
         outputs.append(output)
-    """
+    
     global_mean = all_means.mean(axis = 0)
     global_std  = all_stds.mean(axis = 0)
     for i in range(n_files):
         for j in range(len(global_std)):
             inputs[i][:, j] -= global_mean[j]
             inputs[i][:, j] /= global_std[j]
-    """
+    
     return inputs, outputs, all_dropout_rates
     
     

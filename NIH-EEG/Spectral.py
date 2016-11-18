@@ -19,8 +19,8 @@ all_bands = {"delta" : DELTA_BINS_400_HZ, "theta" : THETA_BINS_400_HZ,
              "all" : ALL_BINS_400_HZ}
 
 @np.vectorize
-def elog(value):
-    return np.log(value) if value > 0 else -9999
+def ezerolog(value):
+    return np.log(value) if value > 0 else 0
 
 def ZCR(signal):
     return len(np.where(np.diff(np.signbit(signal)))[0])
@@ -30,15 +30,15 @@ def STE(signal):
 
 def PowerSpectrum(signal):
     fft = np.fft.fft(signal)
-    return fft ** 2 / len(fft)
+    return fft.real ** 2 / len(fft)
 
 def ProbSpectralDensity(signal):
-    spectrum = PowerSpectrum(signal).real
+    spectrum = PowerSpectrum(signal)
     return spectrum / np.sum(spectrum)
 
 def PowerSpectralEntropy(signal):
     density = ProbSpectralDensity(signal)
-    return - np.sum(density * elog(density))
+    return - np.sum(density * ezerolog(density))
 
 def allCoherenceBins(N, fs):
     return coherence(np.random.rand(N), np.random.rand(N), fs = fs)[0]

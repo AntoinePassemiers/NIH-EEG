@@ -40,32 +40,28 @@ def main():
                         break
         p_filenames.append(p_temp)
         n_filenames.append(n_temp)
-    
-    p_filenames[0] = [os.path.join(DATA_PATH, "Train/train_1/1_77_1.mat"),
-                   os.path.join(DATA_PATH, "Train/train_1/1_16_1.mat")] + p_filenames[0]
-    n_filenames[0] = [os.path.join(DATA_PATH, "Train/train_1/1_89_0.mat"),
-                   os.path.join(DATA_PATH, "Train/train_1/1_23_0.mat")] + n_filenames[0]
             
     n_states = 5        
     config = IOConfig()
     config.n_iterations = 50
     config.pi_learning_rate = 0.005
-    config.pi_nhidden = 30
+    config.pi_nhidden = 40
     config.pi_nepochs = 2
     config.s_learning_rate  = 0.005
-    config.s_nhidden  = 30
+    config.s_nhidden  = 40
     config.s_nepochs = 2
     config.o_learning_rate  = 0.005
-    config.o_nhidden  = 30
+    config.o_nhidden  = 40
     config.o_nepochs = 2
     config.missing_value_sym = np.nan
     featureset = FeatureSet(16, fs = 400)
     featureset.add(FeatureSTE())
     featureset.add(FeatureZeroCrossings())
     featureset.add(FeatureSpectralCoherence().config(architecture = "circular", band = "all"))
-    # featureset.add(FeatureHurstExponent())
+    featureset.add(FeatureSpectralEntropy())
     model_path = os.path.join(DATA_PATH, "model")
     model_id = 0
+    classifiers = list()
     for k in range(3):
         for j in range(2 * len(p_filenames[k]) / NUM_EXAMPLES_BY_MODEL):
             filepaths  = p_filenames[k][j*NUM_EXAMPLES_BY_MODEL:(j+1)*NUM_EXAMPLES_BY_MODEL]
@@ -79,6 +75,7 @@ def main():
                 rd_labels.append(labels[id])
             labels = rd_labels
             filepaths = rd_filepaths
+            iohmm = AdaptiveHMM(n_states, has_io = True)
             if not os.path.isfile(os.path.join(model_path, "classifier_%i" % model_id)):
                 inputs, outputs, all_dropout_rates = preprocessDataset(filepaths, labels, featureset)
                 np.save(open("features", "wb"), inputs)
@@ -88,16 +85,21 @@ def main():
                         target_sequences.append(np.zeros(len(inputs[j])))
                     else:
                         target_sequences.append(np.ones(len(inputs[j])))
-                iohmm = AdaptiveHMM(n_states, has_io = True)
                 fit = iohmm.fit(inputs, targets = target_sequences, n_classes = 2,
                             is_classifier = True, parameters = config)
                 for i in range(4):
                     np.save(open("iohmm_training_%i" % i, "wb"), fit[i])
+                info = [(label, dropout) for label, dropout in zip(labels, all_dropout_rates)]
+                pickle.dump(info, open('sequence_info', "wb"))
                 iohmm.pySave(os.path.join(model_path, "classifier_%i" % model_id))
                 # iohmm = AdaptiveHMM(n_states, has_io = True)
                 # iohmm.pyLoad(os.path.join(model_path, "classifier_%i" % model_id))
                 for i in range(len(inputs)):
                     print(iohmm.predictIO(inputs[i]), labels[i])
+            else:
+                iohmm.pyLoad(os.path.join(model_path, "classifier_%i" % model_id))
+                print("Classifier %i loaded" % model_id)
+            classifiers.append(iohmm)
             model_id += 1
         
 if __name__ == "__main__":
