@@ -12,7 +12,7 @@ from HMM_Core import AdaptiveHMM, IOConfig
 from features import *
 
 NUM_EXAMPLES_BY_MODEL = 4
-MIN_FILE_SIZE = 1500000
+MIN_FILE_SIZE = 4500000
 
 def main(): 
     directory = os.path.join(MODEL_PATH, "HMMs")
@@ -64,8 +64,8 @@ def main():
     classifiers = list()
     for k in range(3):
         for j in range(2 * len(p_filenames[k]) / NUM_EXAMPLES_BY_MODEL):
-            filepaths  = p_filenames[k][j*NUM_EXAMPLES_BY_MODEL:(j+1)*NUM_EXAMPLES_BY_MODEL]
-            filepaths += n_filenames[k][j*NUM_EXAMPLES_BY_MODEL:(j+1)*NUM_EXAMPLES_BY_MODEL]
+            filepaths  = p_filenames[k][j*NUM_EXAMPLES_BY_MODEL/2:(j+1)*NUM_EXAMPLES_BY_MODEL/2]
+            filepaths += n_filenames[k][j*NUM_EXAMPLES_BY_MODEL/2:(j+1)*NUM_EXAMPLES_BY_MODEL/2]
             labels = [1] * (NUM_EXAMPLES_BY_MODEL / 2) + [0] * (NUM_EXAMPLES_BY_MODEL / 2)
             rd_ids = list(range(NUM_EXAMPLES_BY_MODEL))
             random.shuffle(rd_ids)
@@ -76,6 +76,7 @@ def main():
             labels = rd_labels
             filepaths = rd_filepaths
             iohmm = AdaptiveHMM(n_states, has_io = True)
+            print(filepaths)
             if not os.path.isfile(os.path.join(model_path, "classifier_%i" % model_id)):
                 inputs, outputs, all_dropout_rates = preprocessDataset(filepaths, labels, featureset)
                 np.save(open("features", "wb"), inputs)
@@ -101,9 +102,28 @@ def main():
                 print("Classifier %i loaded" % model_id)
             classifiers.append(iohmm)
             model_id += 1
+            
+def test():
+    featureset = FeatureSet(16, fs = 400)
+    featureset.add(FeatureSTE())
+    featureset.add(FeatureZeroCrossings())
+    featureset.add(FeatureSpectralCoherence().config(architecture = "circular", band = "all"))
+    featureset.add(FeatureSpectralEntropy())
+    
+    labels = [0, 1, 1, 0]
+    filenames = ["1_110_1.mat", "1_10_1.mat", "1_1029_0.mat", "1_1028_0"]
+    filepaths = [os.path.join(DATA_PATH, "Train/train_1/" + filename) for filename in filenames]
+    model_path = os.path.join(DATA_PATH, "model")
+    
+    inputs, outputs, all_dropout_rates = preprocessDataset(filepaths, labels, featureset)
+    
+    iohmm = AdaptiveHMM(5, has_io = True)
+    iohmm.pyLoad(os.path.join(model_path, "classifier_%i" % 0))
+    for i in range(len(labels)):
+        print(iohmm.predictIO(inputs[0]), labels[i])
         
 if __name__ == "__main__":
-    main()
+    test()
     print("Finished")
     
     
