@@ -1,35 +1,30 @@
 import numpy as np
 import os
 
-from HMM_Core import AdaptiveHMM, IOConfig
-
-
-def customBoost(inputs, targets, n_boost, n_states, io_config, model_path):
-    classifiers = list()
-    weights = np.ones(len(targets), dtype = np.float64) / len(targets)
-    target_sequences = list()
-    for j in range(len(targets)):
-        if targets[j] == 0:
-            target_sequences.append(np.zeros(len(inputs[j])))
-        else:
-            target_sequences.append(np.ones(len(inputs[j])))
-    shift = 4
+def AdaBoost(classifiers, inputs, target_sequences):
+    n_boost = len(classifiers)
+    Y = np.empty(len(target_sequences))
+    for i in range(len(target_sequences)):
+        Y[i] = target_sequences[i][-1]
+    Y[Y == 0] = -1
+    alpha = np.empty(n_boost, dtype = np.float64)
+    weights = np.ones(len(target_sequences), dtype = np.float64) / len(target_sequences)
+    predictions = np.empty(len(target_sequences), dtype = np.int)
     for i in range(n_boost):
-        iohmm = AdaptiveHMM(n_states, has_io = True)
-        if not os.path.isfile(os.path.join(model_path, "classifier_%i" % i)):
-            iohmm.fit(inputs[i*shift:(i+1)*shift], targets = target_sequences[i*shift:(i+1)*shift], 
-                      weights = weights, n_classes = 2,
-                        is_classifier = True, parameters = io_config)
-            iohmm.pySave(os.path.join(model_path, "classifier_%i" % i))
-        else:
-            iohmm.pyLoad(os.path.join(model_path, "classifier_%i" % i))
-        classifiers.append(iohmm)
-    return classifiers
+        for j in range(len(target_sequences)):
+            predictions[j] = classifiers[i].predictIO(inputs[j], binary_prediction = True)[0]
+            predictions[j] = -1 if predictions[j] == 0 else 1
+        error = np.dot(weights, predictions != Y)
+        print(error)
+        print(0.5 * np.log(float(1 - error) / float(error)))
+        alpha[i] = 0.5 * np.log(float(1 - error) / float(error))
+        weights *= np.exp(- alpha[i] * Y * predictions)
+        weights /= np.sum(weights)
+    return alpha
 
-def customBoostPredict(input, classifiers):
+def AdaBoostPredict(input, classifiers, alpha):
     result = 0
     for i in range(len(classifiers)):
-        prediction = classifiers[i].predictIO(input)
-        result += prediction
-    print(result)
-    return result > (float(len(classifiers)) / 2)
+        prediction = -1 if classifiers[i].predictIO(input) == 0 else 1
+        result += alpha[i] * prediction
+    return 1 if result > 0 else 0

@@ -19,14 +19,17 @@ class TooMuchDropOut(ValueError):
     def __init__(self, message, *args):
         self.message = message
         super(TooMuchDropOut, self).__init__(message, *args)
-        
-def checkDropOuts(data, raise_error = True):
-    total = data.shape[0] * data.shape[1]
+
+def checkDropOutsByChannel(data, raise_error = False, threshold = 0.008):
+    has_nan = False
+    total = data.shape[0]
     nonzeros = np.count_nonzero(data)
     dropouts = total - nonzeros
-    if dropouts > 0 and raise_error:
-        raise TooMuchDropOut("Error. Too much drop out in mat file.")
-    return float(dropouts) / float(total) > 0.008
+    if float(dropouts) / float(total) > threshold:
+        has_nan = True
+        if raise_error:
+            raise TooMuchDropOut("Error. Too much drop out in mat file.")
+    return has_nan
 
 def matToDataset(mat):
     data_struct = mat["dataStruct"][0][0]
@@ -61,78 +64,78 @@ def getFileDataset(I, J, K):
     dataset = matToDataset(loadmat(filename))
     return dataset
 
-def exploreDatabase():
-    for i in range(18):
-        dataset = getDataset(1, i + 1, 1)
-        sequence_number = dataset["sequence_number"]
-        print(sequence_number) 
-    """
-    path = os.path.join(DATA_PATH, "Train/train_1")
-    for filename in os.listdir(path):
-        filepath = os.path.join(path, filename)
-        data_struct = loadmat(filepath)["dataStruct"][0][0]
-        sequence_number = data_struct[4][0][0]
-        print(filename, sequence_number)
-    """
-    
-def downSample(signal, f1, f2):
-    step = np.round(float(f1) / f2)
-    return signal[::step] if len(signal.shape) == 1 else signal[::step, :]
-
-
 def extractFeatures(dataset, featureset, begin, end):
     assert(begin < end)
     n_features = len(featureset)
     data = dataset["data"][begin:end]
-    has_dropouts = checkDropOuts(data, raise_error = False)
-    # window = np.hanning(end - begin)
-    # for i in range(16):
-    #    data[:, i] = window * data[:, i]
     grubbs = GrubbsTest(end - begin, alpha = 0.01)
     for i in range(featureset.n_electrodes):
-        while grubbs.test(data[:, i]):
-            pass
-    if not has_dropouts:
-        assert(len(featureset) > 0)
-        features = np.empty(len(featureset), dtype = np.float64)
-        for f in featureset.shared:
-            f.process(data)
-        k, l = 0, 0
-        for f in featureset.getFeatures():
-            l += len(f)
-            features[k:l] = f.process(data)
-            k += len(f)
-        return features, False
-    else:
-        features = np.empty(n_features)
-        features[:] = np.nan
-        return features, True
+        n_outliers = 0
+        while grubbs.test(data[:, i]) and n_outliers < 60:
+            n_outliers += 1
+    assert(len(featureset) > 0)
+    features = np.empty(len(featureset), dtype = np.float64)
+    """
+    for f in featureset.shared:
+        f.process(data)
+    """
+    k, l = 0, 0
+    for f in featureset.getFeatures():
+        l += len(f)
+        features[k:l] = f.process(data)
+        k += len(f)
+    return features
+
+def closestExponent(step):
+    exponent = 1
+    while (exponent << 1) < step:
+        exponent = exponent << 1
+    return exponent
 
 def process(dataset, featureset):
-    n_samples = 400
+    n_samples = 20
+    step = len(dataset["data"]) / n_samples
+    # win_size = closestExponent(step)
+    win_size = step
+    data = dataset["data"]
+    assert(len(data) == 240000)
     n_features = len(featureset)
     obs = np.zeros((n_samples, n_features), dtype = np.float)
-    step = len(dataset["data"]) / n_samples
-    dropout_rate = 0
     for i in range(n_samples):
-        features, has_nan = extractFeatures(dataset, featureset, i * step, i * step + 512)
-        dropout_rate = dropout_rate if not has_nan else dropout_rate + 1
+        features = extractFeatures(dataset, featureset, i * step, i * step + win_size)
         if len(features) > 0:
             obs[i] = features
         else:
             if 0 < i:
                 obs[i] = obs[i - 1]
-    dropout_rate /= float(n_samples)
-    return obs, dropout_rate
+    return obs
 
-def MCC(TP, FP, TN, FN):
+def accuracy(predictions, ys):
+    acc = 0.0
+    for i in range(len(ys)):
+        acc += 1 - np.abs(predictions[i] - ys[i])
+    return acc / len(ys)
+
+def MCC(predictions, ys):
     """ Matthew's Correlation Coefficient """
+    TP, TN, FP, FN = 0, 0, 0, 0
+    for i in range(len(predictions)):
+        if predictions[i] == 1:
+            if ys[i] == 1:
+                TP += 1
+            else:
+                FP += 1
+        elif predictions[i] == 0.5:
+            pass
+        else:
+            if ys[i] == 1:
+                FN += 1
+            else:
+                TN += 1
     mcc = np.sqrt((TP + FP) * (TP + FN) * (TN + FP) * (TN + FN))
     if mcc != 0:
         mcc = (TP * TN + FP * FN) / mcc
-    positive_rate = 0 if TP + FN == 0 else float(TP) / (TP + FP)
-    negative_rate = 0 if FP + TN == 0 else float(TN) / (TN + FN)  
-    return mcc, positive_rate, negative_rate
+    return mcc
 
 def removeCorruptedFiles():
     safe_labels_file = open(os.path.join(DATA_PATH, "train_and_test_data_labels_safe.csv"), "r")
@@ -153,19 +156,23 @@ def preprocessDataset(filepaths, labels, featureset):
     n_files = len(filepaths)
     n_features = len(featureset)
     inputs, outputs = list(), list()
-    all_means = np.empty((n_files, n_features))
-    all_stds  = np.empty((n_files, n_features))
     all_dropout_rates = list()
     for i in range(n_files):
         filepath = filepaths[i]
         print("Processing file number %i" % i)
         mat = loadmat(filepath)
-        data, dropout_rate = process(matToDataset(mat), featureset)
+        data = process(matToDataset(mat), featureset)
         data = np.asarray(data, dtype = np.float32)
-        all_dropout_rates.append(dropout_rate)
+        
+        """
         masked = np.ma.masked_array(data, np.isnan(data))
-        all_means[i, :] = np.mean(masked, axis = 0)
-        all_stds[i, :] = np.std(masked, axis = 0)
+        loc = np.mean(masked, axis = 1)
+        scale = np.std(masked, axis = 1)
+        for j in range(data.shape[1]):
+            data[:, j] -= loc
+            data[:, j] /= scale
+        """
+        
         label = labels[i]
         if label == 1:
             output = np.ones(len(data), dtype = np.int32)
@@ -177,14 +184,7 @@ def preprocessDataset(filepaths, labels, featureset):
         inputs.append(data)
         outputs.append(output)
     
-    global_mean = all_means.mean(axis = 0)
-    global_std  = all_stds.mean(axis = 0)
-    for i in range(n_files):
-        for j in range(len(global_std)):
-            inputs[i][:, j] -= global_mean[j]
-            inputs[i][:, j] /= global_std[j]
-    
-    return inputs, outputs, all_dropout_rates
+    return inputs, outputs
     
     
     

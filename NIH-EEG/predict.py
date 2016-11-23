@@ -12,6 +12,7 @@ from HMM_Core import AdaptiveHMM, IOConfig
 from Spectral import *
 from features import *
 from AdaBoost import *
+from utils import *
 
 # https://github.com/MichaelHills/seizure-prediction
 # https://en.wikipedia.org/wiki/Hurst_exponent
@@ -26,6 +27,7 @@ from AdaBoost import *
 """
 
 np.seterr(invalid = 'warn')
+
 
 def pickleMatFiles():
     folders = ["New_test/test_3_new"]
@@ -121,5 +123,5 @@ def main():
     
 
 if __name__ == "__main__":
-    main()
+    predictAll()
     print("Finished")
