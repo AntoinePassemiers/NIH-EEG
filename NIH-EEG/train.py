@@ -12,22 +12,32 @@ from HMM_Core import AdaptiveHMM, IOConfig
 from features import *
 from AdaBoost import *
 
-NUM_EXAMPLES_BY_MODEL = 32
+NUM_EXAMPLES_BY_MODEL = 64
 MIN_FILE_SIZE = 4500000
 
 featureset = FeatureSet(16, fs = 400)
+featureset.add(FeatureLogSpectrum())
+"""
 featureset.add(FeatureSTE())
 featureset.add(FeatureZeroCrossings())
 featureset.add(FeatureSpectralCoherence().config(architecture = "circular", band = "all"))
 featureset.add(FeatureSpectralEntropy())
+"""
+
+def showNaNs(input):
+    N = len(input)
+    nan_counts = np.empty(input.shape[1], dtype = np.float)
+    for i in range(input.shape[1]):
+        nan_counts[i] = float(np.count_nonzero(np.isnan(input[:, i]))) / float(N)
+    print(nan_counts.max())
 
 def pickleFiles(use_test_set = True):
     if not use_test_set:
         source_folder_base = "Train/train_%i"
-        dest_folder_base = "Train/pkl_train_%i"
+        dest_folder_base = "Train/pklcnn_train_%i"
     else:
         source_folder_base = "New_test/test_%i_new"
-        dest_folder_base = "New_test/pkl_test_%i_new"
+        dest_folder_base = "New_test/pklcnn_test_%i_new"
     for k in range(3):
         directory = os.path.join(DATA_PATH, source_folder_base % (k + 1))
         dest_directory = os.path.join(DATA_PATH, dest_folder_base % (k + 1))
@@ -96,17 +106,17 @@ def main():
             
     n_states = 5
     config = IOConfig()
-    config.n_iterations = 100
+    config.n_iterations = 50
     config.pi_learning_rate = 0.005
-    config.pi_nhidden = 40
+    config.pi_nhidden = 100
     config.pi_nepochs = 2
     config.pi_activation = "sigmoid"
     config.s_learning_rate  = 0.005
-    config.s_nhidden  = 50
+    config.s_nhidden  = 100
     config.s_nepochs = 2
-    config.s_activation = "tanh"
-    config.o_learning_rate  = 0.002
-    config.o_nhidden  = 50
+    config.s_activation = "sigmoid"
+    config.o_learning_rate  = 0.005
+    config.o_nhidden  = 100
     config.o_nepochs = 2
     config.o_activation = "sigmoid"
     config.missing_value_sym = np.nan
@@ -136,6 +146,7 @@ def main():
                 inputs, outputs = list(), list()
                 for i in range(len(filepaths)):
                     input = pickle.load(open(filepaths[i], "rb"))[0]
+                    showNaNs(input)
                     inputs.append(input)
                 np.save(open("features", "wb"), inputs)
                 target_sequences = list()
@@ -146,7 +157,7 @@ def main():
                         target_sequences.append(np.ones(len(inputs[j])))
                 fit = iohmm.fit(inputs, targets = target_sequences, n_classes = 2,
                             is_classifier = True, parameters = config)
-                for i in range(4):
+                for i in range(5):
                     np.save(open("iohmm_training_%i" % i, "wb"), fit[i])
                 pickle.dump(labels, open('sequence_info', "wb"))
                 iohmm.pySave(os.path.join(model_path, "classifier_%i" % model_id))
@@ -159,6 +170,7 @@ def main():
                     ys.append(outputs[i][-1])
                     print(prediction, outputs[i][-1])
                 print("MCC : %f" % float(MCC(predictions, ys)))
+                return
                 
             else:
                 iohmm.pyLoad(os.path.join(model_path, "classifier_%i" % model_id))

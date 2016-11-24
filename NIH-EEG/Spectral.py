@@ -12,6 +12,8 @@ BETA_BINS_400_HZ  = slice(8, 20)
 GAMMA_BINS_400_HZ = slice(20, 45)
 HIGH_GAMMA_BINS_400_HZ = slice(45, 116)
 ALL_BINS_400_HZ = slice(0, 120)
+ALL_BANDS_400_HZ = [DELTA_BINS_400_HZ, THETA_BINS_400_HZ, ALPHA_BINS_400_HZ,
+                    BETA_BINS_400_HZ, GAMMA_BINS_400_HZ, HIGH_GAMMA_BINS_400_HZ]
 
 all_bands = {"delta" : DELTA_BINS_400_HZ, "theta" : THETA_BINS_400_HZ, 
              "alpha" : ALPHA_BINS_400_HZ, "beta" : BETA_BINS_400_HZ, 
@@ -53,7 +55,7 @@ def AutospectralDensities(signals, fs):
         autospectralDensities.append(csd(signals[:, i], signals[:, i], fs = fs)[1])
     return autospectralDensities
 
-def AlphaCoherence(signals, autospectralDensities, i, j, fs):
+def CustomSpectralCoherence(signals, autospectralDensities, i, j, fs):
     G_xy = np.abs(csd(signals[:, i], signals[:, j], fs = fs)[1])
     G_xx = autospectralDensities[i]
     G_yy = autospectralDensities[j]
@@ -64,3 +66,21 @@ def AlphaCoherence(signals, autospectralDensities, i, j, fs):
     elif B == 0:
         return 0
     return np.dot(G_xy, G_xy) / np.vdot(G_xx, G_yy).real
+
+def LogSpectrum(signal, n_coef):
+    N = len(signal)
+    fft_freq = np.fft.fftfreq(N)
+    spectrum = np.log(np.abs(np.fft.fft(signal).real))
+    features = np.empty(n_coef, dtype = np.float32)
+    max_freq = COHERENCE_BINS[-1]
+    i = 0
+    while fft_freq[i] < max_freq and i < N / 2:
+        i += 1
+    fft_freq = fft_freq[1:i]
+    step = float(len(fft_freq)) / float(n_coef)
+    begin = 0.0
+    for i in range(n_coef):
+        end = begin + step
+        features[i] = spectrum[np.round(begin):np.round(end)].mean()
+        begin = end
+    return features

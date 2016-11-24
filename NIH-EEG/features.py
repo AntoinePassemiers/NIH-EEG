@@ -11,6 +11,23 @@ class Feature:
     def __len__(self):
         return self.n_electrodes
     
+class FeatureLogSpectrum(Feature):
+    coherences = list()
+    def __init__(self, *args, **kwargs):
+        Feature.__init__(self, *args, **kwargs)
+        self.n_coef = 144
+    def __len__(self):
+        return self.n_electrodes * self.n_coef
+    def process(self, signals):
+        features = np.empty(self.__len__(), dtype = float)
+        for i in range(self.n_electrodes):
+            has_nan = checkDropOutsByChannel(signals[:, i])
+            if not has_nan:
+                features[(i * self.n_coef):((i + 1) * self.n_coef)] = LogSpectrum(signals[:, i], self.n_coef)
+            else:
+                features[(i * self.n_coef):((i + 1) * self.n_coef)] = np.nan
+        return features
+    
 class FeatureLyapunovExponent(Feature):
     def __init__(self, *args, **kwargs):
         Feature.__init__(self, *args, **kwargs)
@@ -67,13 +84,14 @@ class FeatureSpectralCoherence(Feature):
         Feature.__init__(self, *args, **kwargs)
         self.architecture = "circular"
         self.band = all_bands["all"]
-        self.electrode_ids = list(range(self.__len__())) + [0]
+        self.electrode_ids = list(range(16)) + [0]
         FeatureSpectralCoherence.coherences.append(self)
     def __len__(self):
+        n_bands = 1 if not self.band == all_bands["all"] else 6
         if self.architecture == "circular":
-            return self.n_electrodes
+            return self.n_electrodes * n_bands
         else:
-            return self.n_electrodes * (self.n_electrodes - 1)
+            return self.n_electrodes * (self.n_electrodes - 1) * n_bands
     def config(self, architecture = "circular", band = "all"):
         self.architecture = architecture
         self.band = all_bands[band]
@@ -81,11 +99,17 @@ class FeatureSpectralCoherence(Feature):
     def process(self, signals):
         features = np.empty(self.__len__(), dtype = float)
         if self.architecture == "circular":
-            autosp = AutospectralDensities(signals, self.fs)
-            for i in range(self.__len__()):
+            # autosp = AutospectralDensities(signals, self.fs)
+            for i in range(16):
                 has_nan = checkDropOutsByChannel(signals[:, i])
-                features[i] = AlphaCoherence(signals, autosp, self.electrode_ids[i], 
+                """
+                features[i] = CustomSpectralCoherence(signals, autosp, self.electrode_ids[i], 
                     self.electrode_ids[i + 1], self.fs) if not has_nan else np.nan
+                """
+                coherences = SpectralCoherence(signals, self.electrode_ids[i], self.electrode_ids[i + 1], fs = self.fs)
+                for j in range(6):
+                    features[i * 6 + j] = coherences[ALL_BANDS_400_HZ[j]].mean() if not has_nan else np.nan
+                
             """
             for i in range(self.__len__()):
                 features[i] = memory[i][self.band].mean()

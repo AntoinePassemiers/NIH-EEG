@@ -20,7 +20,7 @@ class TooMuchDropOut(ValueError):
         self.message = message
         super(TooMuchDropOut, self).__init__(message, *args)
 
-def checkDropOutsByChannel(data, raise_error = False, threshold = 0.008):
+def checkDropOutsByChannel(data, raise_error = False, threshold = 0.05):
     has_nan = False
     total = data.shape[0]
     nonzeros = np.count_nonzero(data)
