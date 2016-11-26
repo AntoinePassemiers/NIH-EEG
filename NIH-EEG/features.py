@@ -87,33 +87,37 @@ class FeatureSpectralCoherence(Feature):
         self.electrode_ids = list(range(16)) + [0]
         FeatureSpectralCoherence.coherences.append(self)
     def __len__(self):
-        n_bands = 1 if not self.band == all_bands["all"] else 6
+        n_bands = len(ALL_BANDS_400_HZ)
         if self.architecture == "circular":
             return self.n_electrodes * n_bands
         else:
-            return self.n_electrodes * (self.n_electrodes - 1) * n_bands
+            return self.n_electrodes * (self.n_electrodes - 1) * n_bands / 2
     def config(self, architecture = "circular", band = "all"):
         self.architecture = architecture
         self.band = all_bands[band]
         return self
     def process(self, signals):
         features = np.empty(self.__len__(), dtype = float)
+        n_bands = len(ALL_BANDS_400_HZ)
         if self.architecture == "circular":
             # autosp = AutospectralDensities(signals, self.fs)
-            for i in range(16):
+            for i in range(self.n_electrodes):
                 has_nan = checkDropOutsByChannel(signals[:, i])
-                """
-                features[i] = CustomSpectralCoherence(signals, autosp, self.electrode_ids[i], 
-                    self.electrode_ids[i + 1], self.fs) if not has_nan else np.nan
-                """
                 coherences = SpectralCoherence(signals, self.electrode_ids[i], self.electrode_ids[i + 1], fs = self.fs)
-                for j in range(6):
-                    features[i * 6 + j] = coherences[ALL_BANDS_400_HZ[j]].mean() if not has_nan else np.nan
-                
-            """
-            for i in range(self.__len__()):
-                features[i] = memory[i][self.band].mean()
-            """
+                for j in range(n_bands):
+                    features[i * n_bands + j] = coherences[ALL_BANDS_400_HZ[j]].mean() if not has_nan else np.nan
+        elif self.architecture == "full":
+            has_nan = np.zeros(self.n_electrodes, dtype = np.bool)
+            for i in range(self.n_electrodes):
+                has_nan[i] = checkDropOutsByChannel(signals[:, i])
+            p = 0
+            for i in range(self.n_electrodes):
+                for k in range(self.n_electrodes):
+                    if i < k:
+                        coherences = SpectralCoherence(signals, i, k, fs = self.fs)
+                        for j in range(n_bands):
+                            features[p * n_bands + j] = coherences[ALL_BANDS_400_HZ[j]].mean() if not (has_nan[i] or has_nan[k]) else np.nan
+                        p += 1
         else:
             NotImplementedError()
         return features

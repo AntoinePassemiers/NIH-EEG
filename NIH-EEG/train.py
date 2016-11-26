@@ -8,21 +8,20 @@ from utils import *
 import os, pickle
 import numpy as np
 
-from HMM_Core import AdaptiveHMM, IOConfig
+from HMM_Core import AdaptiveHMM
 from features import *
-from AdaBoost import *
+from configs import *
 
-NUM_EXAMPLES_BY_MODEL = 64
 MIN_FILE_SIZE = 4500000
 
 featureset = FeatureSet(16, fs = 400)
+"""
 featureset.add(FeatureLogSpectrum())
 """
 featureset.add(FeatureSTE())
 featureset.add(FeatureZeroCrossings())
-featureset.add(FeatureSpectralCoherence().config(architecture = "circular", band = "all"))
+featureset.add(FeatureSpectralCoherence().config(architecture = "full", band = "all"))
 featureset.add(FeatureSpectralEntropy())
-"""
 
 def showNaNs(input):
     N = len(input)
@@ -34,10 +33,10 @@ def showNaNs(input):
 def pickleFiles(use_test_set = True):
     if not use_test_set:
         source_folder_base = "Train/train_%i"
-        dest_folder_base = "Train/pklcnn_train_%i"
+        dest_folder_base = "Train/pkl_train_%i"
     else:
         source_folder_base = "New_test/test_%i_new"
-        dest_folder_base = "New_test/pklcnn_test_%i_new"
+        dest_folder_base = "New_test/pkl_test_%i_new"
     for k in range(3):
         directory = os.path.join(DATA_PATH, source_folder_base % (k + 1))
         dest_directory = os.path.join(DATA_PATH, dest_folder_base % (k + 1))
@@ -99,33 +98,20 @@ def randomTrainingFilenames(patient_id, n_files = None):
 
 def main(): 
     p_filenames, n_filenames = list(), list()
-    for k in range(1):
+    for k in range(2):
         p_temp, n_temp = randomTrainingFilenames(k + 1, None)
         p_filenames.append(p_temp)
         n_filenames.append(n_temp)
-            
+        
     n_states = 5
-    config = IOConfig()
-    config.n_iterations = 50
-    config.pi_learning_rate = 0.005
-    config.pi_nhidden = 100
-    config.pi_nepochs = 2
-    config.pi_activation = "sigmoid"
-    config.s_learning_rate  = 0.005
-    config.s_nhidden  = 100
-    config.s_nepochs = 2
-    config.s_activation = "sigmoid"
-    config.o_learning_rate  = 0.005
-    config.o_nhidden  = 100
-    config.o_nepochs = 2
-    config.o_activation = "sigmoid"
-    config.missing_value_sym = np.nan
     model_path = os.path.join(DATA_PATH, "model")
     model_id = 0
     classifiers = list()
     # for k in range(3):
-    for k in range(1):
+    for k in range(2):
         print("Processing patient %i" % (k + 1))
+        config = io_configs[k]
+        NUM_EXAMPLES_BY_MODEL = config.n_examples
         patient_classifiers = list()
         n_classifiers_for_this_patient = 1
         # n_classifiers_for_this_patient = 2 * len(p_filenames[k]) / NUM_EXAMPLES_BY_MODEL
@@ -162,21 +148,21 @@ def main():
                 pickle.dump(labels, open('sequence_info', "wb"))
                 iohmm.pySave(os.path.join(model_path, "classifier_%i" % model_id))
                 
-                inputs, outputs = randomValidationSet(k + 1, 500)
-                predictions, ys = list(), list()
-                for i in range(len(inputs)):
-                    prediction = iohmm.predictIO(inputs[i])[0]
-                    predictions.append(prediction)
-                    ys.append(outputs[i][-1])
-                    print(prediction, outputs[i][-1])
-                print("MCC : %f" % float(MCC(predictions, ys)))
-                return
-                
             else:
                 iohmm.pyLoad(os.path.join(model_path, "classifier_%i" % model_id))
                 print("Classifier %i loaded" % model_id)
+                
             patient_classifiers.append(iohmm)
             model_id += 1
+            
+        inputs, outputs = randomValidationSet(k + 1, 500)
+        predictions, ys = list(), list()
+        for i in range(len(inputs)):
+            prediction = patient_classifiers[0].predictIO(inputs[i])[0]
+            predictions.append(prediction)
+            ys.append(outputs[i][-1])
+            print(prediction, outputs[i][-1])
+        print("MCC : %f" % float(MCC(predictions, ys)))
             
         classifiers.append(patient_classifiers)
     return classifiers
@@ -202,8 +188,8 @@ def test():
         print(prediction)
         
 if __name__ == "__main__":
-    # main()
-    pickleFiles(use_test_set = False)
+    main() # 0.507030
+    # pickleFiles(use_test_set = False)
     print("Finished")
     
     
