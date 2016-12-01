@@ -73,6 +73,7 @@ def extractFeatures(dataset, featureset, begin, end):
         n_outliers = 0
         while grubbs.test(data[:, i]) and n_outliers < 60:
             n_outliers += 1
+        data[:, i] = grubbs.removeNans(data[:, i])
     assert(len(featureset) > 0)
     features = np.empty(len(featureset), dtype = np.float64)
     """
