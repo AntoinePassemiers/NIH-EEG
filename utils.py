@@ -15,11 +15,13 @@ import numpy as np
 from scipy.io import loadmat
 
 
-with open('SETTINGS.json') as settings_file:
-    SETTINGS = json.load(settings_file)
+DATA_PATH = 'data'
+if not os.path.exists(DATA_PATH):
+    os.makedirs(DATA_PATH)
 
-DATA_PATH = str(SETTINGS["DATA_PATH"])
-MODEL_PATH = str(SETTINGS["MODEL_PATH"])
+MODEL_PATH = 'model'
+if not os.path.exists(MODEL_PATH):
+    os.makedirs(MODEL_PATH)
 
 
 class TooMuchDropOut(ValueError):
